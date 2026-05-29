@@ -9,7 +9,7 @@ Enterprise React application for managing customer data, connected to the FastAP
 | Layer         | Technology                       |
 |---------------|----------------------------------|
 | Framework     | React 18 (Create React App)      |
-| HTTP Client   | Axios                            |
+| HTTP Client   | Native Fetch API (built-in)      |
 | Styling       | Pure CSS (custom design system)  |
 | Fonts         | Playfair Display + DM Sans       |
 | State         | React useState / custom hooks    |
@@ -24,7 +24,7 @@ frontend/
 │   └── index.html
 ├── src/
 │   ├── api/
-│   │   └── customerApi.js        ← All Axios API calls
+│   │   └── customerApi.js        ← All Fetch API calls
 │   ├── components/
 │   │   ├── common/
 │   │   │   ├── Badge.jsx         ← StatusBadge, TypeBadge
