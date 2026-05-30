@@ -43,7 +43,7 @@ This demo is intentionally simple enough for beginners to follow, yet structured
 | Layer        | Technology              | Version    | Purpose                                     |
 |--------------|-------------------------|------------|---------------------------------------------|
 | Frontend     | React                   | 18         | UI component framework                      |
-| HTTP Client  | Axios                   | Latest     | API calls from frontend to backend          |
+| HTTP Client  | Native `fetch` (browser)| Built-in   | API calls from frontend to backend — no extra dependency |
 | CSS          | Pure CSS (custom)       | —          | Styling and design system                   |
 | Backend      | FastAPI                 | 0.111      | Python web framework for REST APIs          |
 | ORM          | SQLAlchemy              | 2.0        | Python-to-SQL database interface            |
@@ -71,7 +71,7 @@ This demo is intentionally simple enough for beginners to follow, yet structured
 │   │   └──────────┘  └──────────┘  └──────────┘  └───────┘ │       │
 │   │                      │                                  │       │
 │   │              ┌───────▼───────┐                          │       │
-│   │              │ customerApi.js│  ← Axios HTTP Client     │       │
+│   │              │ customerApi.js│  ← Native fetch HTTP Client  │       │
 │   │              └───────┬───────┘                          │       │
 │   └──────────────────────┼──────────────────────────────────┘       │
 └──────────────────────────┼──────────────────────────────────────────┘
@@ -169,7 +169,7 @@ frontend/
 │
 ├── src/
 │   ├── api/
-│   │   └── customerApi.js      ← All Axios HTTP calls to backend
+│   │   └── customerApi.js      ← All HTTP calls to backend (native fetch)
 │   │
 │   ├── components/
 │   │   ├── common/
@@ -259,13 +259,30 @@ Encapsulates customer data state and API calls. Exposes `customers`, `loading`, 
 
 ### API Layer — `customerApi.js`
 
-This file is the single point of contact between the frontend and the backend. All six API functions are defined here using Axios.
+This file is the single point of contact between the frontend and the backend. All six API functions are defined here using the **browser's built-in `fetch` API** — no third-party HTTP library is required. Axios has been removed entirely from the project dependencies.
+
+The public interface of this file is **unchanged**: every page and hook calls the same six functions with the same parameters and receives the same return values as before. Only the internal implementation was rewritten.
+
+**Internal structure:**
 
 ```javascript
-// API base URL (from environment variable or default)
+// 1. Base URL — reads from .env or falls back to the local backend
 const BASE_URL = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api/v1';
 
-// The six API functions:
+// 2. Shared headers applied to every request
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+// 3. buildQuery() — converts a params object to a URL query string
+//    Automatically skips null, undefined, and empty-string values
+//    Example: { page: 1, per_page: 10 } → "?page=1&per_page=10"
+const buildQuery = (params) => { … };
+
+// 4. request() — central wrapper used by all six API functions
+//    Handles: network failures, non-JSON responses, HTTP 4xx/5xx errors
+//    Always throws { message: "..." } so callers can use catch(err) => err.message
+const request = (method, path, { body, query }) => { … };
+
+// 5. The six exported API functions (signatures identical to before):
 createCustomer(payload)              // POST   /customers/
 getAllCustomers(page, perPage)        // GET    /customers/?page=1&per_page=10
 getCustomerById(id)                  // GET    /customers/{id}
@@ -274,11 +291,7 @@ deleteCustomer(id)                   // DELETE /customers/{id}
 searchCustomers(params)              // GET    /customers/search?keyword=...
 ```
 
-The Axios instance is configured with:
-- `baseURL` pointing to the FastAPI backend
-- `Content-Type: application/json` header on all requests
-- `timeout: 10000` (10 second timeout)
-- A response interceptor that extracts clean error messages from any failed response
+**Why no Axios?** The browser's native `fetch` API is available in all modern browsers and in Node.js 18+, so Axios is not needed for this project. Removing it eliminates one dependency from `package.json` and reduces the installed package footprint.
 
 ### Validation Flow (Frontend)
 
@@ -1277,22 +1290,46 @@ Two handlers catch errors before they reach the client:
 
 ### Frontend Error Handling (`customerApi.js`)
 
-The Axios response interceptor normalises all API errors into a consistent `{ message: "..." }` format:
+The central `request()` wrapper function normalises all API errors into a consistent `{ message: "..." }` shape. It handles three failure cases:
+
 ```javascript
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const msg =
-      error?.response?.data?.message ||
-      error?.response?.data?.detail  ||
-      error?.message                 ||
-      'An unexpected error occurred.';
-    return Promise.reject({ message: msg, raw: error });
+const request = async (method, path, { body, query } = {}) => {
+  const url = BASE_URL + path + (query ? buildQuery(query) : '');
+
+  const response = await fetch(url, {
+    method,
+    headers: JSON_HEADERS,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // network failure (no internet, server down) → fetch() itself throws,
+  // caught by the caller's try/catch
+
+  if (!response.ok) {
+    // HTTP 4xx / 5xx — parse the JSON error body if possible
+    let msg = `Request failed with status ${response.status}`;
+    try {
+      const err = await response.json();
+      msg = err.message || err.detail || msg;
+    } catch (_) { /* non-JSON error body — keep the default msg */ }
+    throw { message: msg };
   }
-);
+
+  return response.json();
+};
 ```
 
-This means every page component can handle errors with a simple `catch(err) => toast.showError(err.message)` without needing to inspect the error shape.
+Because every API function calls `request()` and every error is thrown as `{ message: "..." }`, all page components can handle errors with a simple pattern:
+
+```javascript
+try {
+  const result = await createCustomer(form);
+  toast.showSuccess(result.message);
+} catch (err) {
+  toast.showError(err.message);
+}
+```
+
+No special error-shape inspection is needed anywhere in the application.
 
 ---
 
@@ -1305,7 +1342,7 @@ PROJECT STRUCTURE AT A GLANCE
   FRONTEND (React)                    BACKEND (FastAPI)
   ─────────────────                   ──────────────────
   src/api/customerApi.js              app/api/customer_routes.py
-    └─ 6 Axios functions                └─ 6 HTTP endpoints
+    └─ 6 fetch-based API functions      └─ 6 HTTP endpoints
 
   src/pages/                          app/services/customer_service.py
     InsertCustomer.jsx                  └─ create, read, update, delete, search

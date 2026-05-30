@@ -10,11 +10,17 @@ const NAV_ITEMS = [
 export const Sidebar = ({ activePage, onNavigate }) => (
   <aside className="sidebar">
     <div className="sidebar-logo">
-      <div className="sidebar-logo-icon">A</div>
-      <div className="sidebar-brand-text">
-        <span className="sidebar-brand-name">Appasamy</span>
-        <span className="sidebar-brand-sub">Customer Management</span>
-      </div>
+      {/* ✅ Logo from public/assets/appasamy-logo.png */}
+      <img
+        src="/assets/appasamy-logo.png"
+        alt="Appasamy Logo"
+        style={{
+          width: '100%',
+          height: 'auto',
+          objectFit: 'contain',
+          display: 'block',
+        }}
+      />
     </div>
 
     <nav className="sidebar-nav">

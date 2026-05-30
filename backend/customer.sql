@@ -1,7 +1,5 @@
 -- =============================================================================
 -- customer.sql
--- Appasamy Customer Management — Database Schema
--- Compatible with: SQLite (default) | PostgreSQL | MySQL
 -- =============================================================================
 
 -- Drop table if it exists (useful during development / reset)
